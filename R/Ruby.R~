@@ -1,0 +1,108 @@
+.rb <- function(...) .External("dotRb", ..., PACKAGE = "rb4R")
+
+## slight improvement of .rb!!
+.rbExec <- function(...,debug=FALSE) {
+  instr <- paste(...,sep="")
+  if(debug) {cat("instr->");print(instr)}
+  .rb(instr)
+  if(debug) cat("instr executed\n")
+  return(invisible())
+}
+
+.rbGetGV<- function(obj) {
+  structure(.External("rb4R_get_gv",obj,PACKAGE = "rb4R"),class="rbObj")
+}
+
+.rbSetGV<- function(obj,val) {
+  .External("rb4R_set_gv",obj,val,PACKAGE = "rb4R")
+  return(invisible())
+}
+
+.rbApply <- function(obj,meth,...) {
+   .External("rb4R_apply",obj,meth,...,PACKAGE = "rb4R")
+}
+
+##Right now, just deal with global variable!!!
+rbObj <- function(obj) {
+  .rbGetGV(as.character(substitute(obj)))
+}
+
+## not a standard method!!!
+is.vector.rbObj<- function(obj) .External("rb4R_is_Rvector",obj,PACKAGE = "rb4R")
+print.rbObj <- function(obj,...) {
+  .External("rb4R_inspect",obj,PACKAGE = "rb4R")
+}
+Ops.rbObj <- function (e1, e2) get(.Generic, mode = "function")(as.vector(e1), as.vector(e2))
+Math.rbObj <- function(e1,...)  get(.Generic, mode = "function")(as.vector(e1),...)
+Summary.rbObj <- function(e1,...) get(.Generic, mode = "function")(as.vector(e1),...)
+
+## rbRVector class
+as.vector.rbRVector<- function(obj,...) {
+  .External("rb4R_as_Rvector",obj,PACKAGE = "rb4R")
+}
+
+"[.rbObj" <- function(obj,ind) {
+  if(as.vector(.rbApply(obj,"respond_to?","[]"))) {
+    .rbApply(obj,"[]",ind)
+  } else warning("this ruby object does not respond to []!!")
+}
+
+print.rbRVector <- function(obj,...) {
+  print( .External("rb4R_as_Rvector",obj,PACKAGE = "rb4R"))
+}
+
+
+
+## this is the wrapper operator replacing the "." extraction operator 
+"$.rbObj" <- function(rbobj,field) {
+  field <- as.character(substitute(field))
+  if(!.rbApply(.rbobj,".respond_to?",field)) {
+    stop(paste("rbObj have to respond to  the method '",field,"'!!!"))
+  }
+  ## is a variable or a  method?
+  if(.rbApply(rbobj,".instance_variables.include?",paste("@",field,sep="")) ) {
+    ## this is a variable
+    obj[["name"]] <- paste( obj[["name"]],field,sep=".")
+    return(obj)
+  } else {
+    ## this is a method
+    ## TODO : maybe something different form variable
+    obj[["name"]] <- paste( obj[["name"]],field,sep=".")
+    return(obj)
+  }
+}
+
+
+
+
+.rbBegin<-function() {
+## if(!exists(".rbStatus",envir=globalenv()) || get(".rbStatus",envir=globalenv())!="begin")
+  .C("rb4R_init", PACKAGE="rb4R")
+ ##assign(".rbStatus","begin",globalenv())
+}
+
+.rbEnd<-function() {
+ ##if(exists(".rbStatus",envir=globalenv()) && get(".rbStatus",envir=globalenv())!="end")
+  .C("rb4R_finalize", PACKAGE="rb4R")
+ ##assign(".rbStatus","end",globalenv())
+}
+
+rbRequire<-function(module) {
+ .rb(paste("require '",module,"'",sep=""))
+}
+
+.rbRequire<-function(module) {
+ .External("dotRbRequire", module, PACKAGE = "rb4R")
+}
+
+rbLoad<-function(prog) {
+  .rb(paste("load '",prog,"'",sep=""))
+}
+
+source2R<-function(file) {
+  .rbBegin()
+  rbRequire("R4rb/2R2R")
+  .rb(paste("R4rb::from2RtoR '",file,".2R'",sep=""))
+  source(paste(file,"_2R.R",sep="")) 
+  .rbEnd()
+}

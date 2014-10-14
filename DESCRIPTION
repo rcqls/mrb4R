@@ -1,0 +1,8 @@
+Package: mrb4R
+Version: 0.1.0
+Title: MRuby Interface
+Author: Cqls Team
+Maintainer: Remy Drouilhet <remy.drouilhet@upmf-grenoble.fr>
+Description: Interface to MRuby
+License: GPL Version 2 or later.
+Archs: x86_64

@@ -1,0 +1,237 @@
+## class rbObj : instance of ruby object already created!!!
+.First.lib <- function(libname, pkgname) {
+  rbRequire("R4rb/eval")
+  rbRequire("cqlsinit") 
+  .rb("$rbVector=R4rb::RVector.new('x') unless $rbVector")
+  .rb("$rbVector << :'.rbVector'")
+  return(invisible())
+}
+
+.Last.lib <- function(libpath) {
+  ##.rbEnd()
+}
+
+## slight improvement of .rb!!
+.rbExec <- function(...,debug=FALSE) {
+  instr <- paste(...,sep="")
+  if(debug) {cat("instr->");print(instr)}
+  .rb(instr)
+  if(debug) cat("instr executed\n")
+  return(invisible())
+}
+
+## two functions for the communication between R and ruby!!!
+.rbVectGet <- function(...,debug=FALSE) {
+  instr <- paste("$rbVector < (",...,")",sep="")
+  if(debug) cat("instr: ",instr,"->")
+  .rb(instr)
+  if(debug) {
+    print(.rbVector)
+    cat("instr executed\n")
+  }
+  .rbVector
+}
+
+.rbVectSet <- function(obj,vectR) {
+  if(!is.vector(vectR)) {
+    stop("Value  have to be a R vector!!!")
+  }
+  if(inherits(obj,"rbObj")) objname <- obj[["name"]]
+  else {
+    if(!is.character(obj)) stop("Object have to be a character or rbObj")
+    objname <- obj
+  }
+  .rbVector <<- vectR
+  .rbExec("$rbVector > ($vectTmp=[])")
+  l <- as.integer(.rbVectGet("$vectTmp.length"))
+  if(l==0)  .rbExec(objname,"=nil")
+  else if(l==1) .rbExec(objname,"=$vectTmp[0]")
+  else .rbExec(objname,"=$vectTmp")
+}
+
+## constructor of rbObj
+rbObj <- function(obj) {
+  obj <- list(name=as.character(substitute(obj)))
+  class(obj) <- "rbObj"
+  obj
+}
+
+## class of the ruby object wrapped by rbObj
+rbClass <- function(obj) {
+  .rbVectGet(obj[["name"]],".class.to_s")
+}
+
+
+is.RArray <- function(obj) {
+  if(.rbVectGet(obj[["name"]],".is_a? Array")) {
+    ##.rbVectGet("e.a.length")#,debug=TRUE)
+    .rbVectGet("(",obj[["name"]],").all?{|elt| [TrueClass,FalseClass,Fixnum,String,Float].include?(elt.class)}")#,debug=TRUE)
+  }
+  return(.rbVector)
+}
+
+## if obj is in out form return TRUE and .rbVector is set
+is.RVector <- function(obj) {
+  out <- rbClass(obj) %in% c("Fixnum","Float","String","TrueClass","FalseClass")
+  if(!out) {##is an array ???
+    out <- is.RArray(obj)
+  }
+  if(out) .rbVectGet(obj[["name"]])##,debug=TRUE)
+  out
+}
+
+## this is the wrapper operator replacing the "." extraction operator 
+"$.rbObj" <- function(obj,field) {
+  field <- as.character(substitute(field))
+  if(!.rbVectGet(obj[["name"]],".respond_to? '",field,"'")) {
+    stop(paste(obj[["name"]],"have to respond to  the method '",field,"'!!!"))
+  }
+  ## is a variable or a  method?
+  if(.rbVectGet(obj[["name"]],".instance_variables.include? '@",field,"'") ) {
+    ## this is a variable
+    obj[["name"]] <- paste( obj[["name"]],field,sep=".")
+    return(obj)
+  } else {
+    ## this is a method
+    ## TODO : maybe somathing different form variable
+    obj[["name"]] <- paste( obj[["name"]],field,sep=".")
+    return(obj)
+  }
+}
+
+"$<-.rbObj" <- function(obj,field,value) {
+  field <- as.character(substitute(field))
+  if(!.rbVectGet(obj[["name"]],".respond_to? '",field,"='")) {
+    stop(paste(obj[["name"]]," have to respond to  the method ",field,"!!!",sep=""))
+  }
+  if(inherits(value,"rbObj")) {
+    .rbExec("$vect2Tmp=",value[["name"]])
+  } else {
+    .rbVectSet("$vect2Tmp",value)
+  }
+  .rbExec(obj[["name"]],".",field,"=$vect2Tmp")
+  obj
+}
+
+## Ruby start Array at index 0 and R at index 1
+"[.rbObj" <- function(obj,i) {
+  if(!.rbVectGet(obj[["name"]],".respond_to? '[]'")) {
+    stop(paste(obj[["name"]],"have to respond to  the method [] !!!"))
+  }
+  if(missing(i)) {
+    return(.rbVectGet(obj[["name"]],".to_a)"))
+  } else {
+    l=as.numeric(obj$length)
+    if(is.logical(i)) {
+      i[is.na(i)] <- FALSE
+      i<-(1:l)[i]
+    }
+    if(!length(i)) return(numeric(0))
+    if(length(i)>1) {
+       ## return in the R spirit subscripting!!!
+      if(max(i)>l) stop("extraction out of range!!!")
+      .rbVectSet("$vectTmp", i-1)
+      .rbVectGet("$vectTmp.map{|i| ",obj[["name"]],"[i]}")
+    } else {
+      ## return the ith element of the rbObj object
+      obj[["name"]] <- paste(obj[["name"]],"[",i-1,"]",sep="")
+      obj
+    }
+  }
+}
+
+"[<-.rbObj" <- function(obj,i,value) {
+  if(!.rbVectGet(obj[["name"]],".respond_to? '[]='")) {
+    stop(paste(obj[["name"]],"have to respond to  the method []= !!!"))
+  }
+  l=as.numeric(obj$length)
+  if(is.logical(i)) {
+    i[is.na(i)] <- FALSE
+    i<-(1:l)[i]
+  }
+  if(!length(i)) return(invisible())
+  ## the main work is here
+   if(length(i)>1) {
+     if(max(i)>l) stop("extraction out of range!!!")
+     if(inherits(value,"rbObj")) {
+       if(!.rbVectGet(value[["name"]],".respond_to? '[]'")) {
+         stop(paste(value[["name"]],"have to respond to  the method [] !!!"))
+       }
+       .rbExec("$vect2Tmp=",value[["name"]])
+     } else {
+       if(length(value) < length(i)) value <- rep(value,l=length(i))  
+       ## tranform in ruby object
+       .rbVectSet("vect2Tmp",value)
+     }
+     .rbVectSet("$vectTmp",i-1)
+     .rbExec("j=-1;$vectTmp.each{|i| j+=1;",obj[["name"]],"[i]=$vect2Tmp[j]}")
+   } else {
+     if(inherits(value,"rbObj")) {
+       .rbExec("$vect2Tmp=",value[["name"]])
+     } else {
+       .rbVectSet("$vect2Tmp",value)
+     }
+     .rbExec(obj[["name"]],"[",i-1,"]=vect2Tmp")
+   }
+  return(obj)
+}
+
+##backup!!!
+##"[<-.rbObj2" <- function(obj,i,value) {
+##  if(!.rbVectGet(obj[["name"]],".respond_to? '[]='")) {
+##    stop(paste(obj[["name"]],"have to respond to  the method []= !!!"))
+##  }
+##  l=as.numeric(obj$length)
+##  if(is.logical(i)) i<-(1:l)[i]
+##  if(!length(i)) return(invisible())
+  ## do not apply this when value is rbObj class since the work is already done!!!
+##   if(inherits(value,"rbObj")) return(obj)
+  ## the main work is here
+##  if(max(i)>l) stop("extraction out of range!!!")
+##    .rbVector <<- (i-1)
+    ##print(i-1)
+##    .rb("rbVector > (vectTmp=[])")
+##    if(length(value) < length(i)) value <- rep(value,l=length(i))
+##    .rbVector <<- value
+##    .rb("rbVector > (vect2Tmp=[])")
+##    .rb(paste("j=-1;vectTmp.each{|i| j+=1;",obj[["name"]],"[i]=vect2Tmp[j]}",sep=""))
+    ##print(paste("j=-1;vectTmp.each{|i| j+=1;",obj[["name"]],"[i]=vect2Tmp[j]}",sep=""))
+    ##.rb(paste("rbVector < (",obj[["name"]],")",sep=""))
+    ##print(.rbVector)
+##  return(obj)
+##}
+
+print.rbObj <- function(obj,debug=FALSE) {
+  if(debug) print.default(obj)
+  else {
+    ##if(is.RVector(obj)) print(.rbVector)
+    ##else {
+      cat(rbClass(obj),":",.rbVectGet(obj[["name"]],".inspect"),"\n")
+    ##}
+  }
+}
+
+index.RArray <- function(obj) {
+  if(.rbVectGet(obj[["name"]],".is_a? Array")) {
+    return(.rbVectGet("(",obj[["name"]],").map{|elt| [TrueClass,FalseClass,Fixnum,String,Float].include?(elt.class)}"))
+  } else return(integer())
+}
+
+  
+as.vector.rbObj <- function(obj,mode) {
+  ##if(is.RArray(obj)) return(.rbVector)
+  if(length(ind <- index.RArray(obj))>0) {
+    as.numeric(.rbVectGet("(",obj[["name"]],").map{|elt| ([TrueClass,FalseClass,Fixnum,String,Float].include?(elt.class)) ? elt.to_s : 'NA'}") )
+  }
+}
+
+as.double.rbObj <- function(obj) {
+   if(is.RVector(obj)) return(.rbVector)
+   else return(NA)
+}
+
+Ops.rbObj <- function (e1, e2) get(.Generic, mode = "function")(as.vector(e1), as.vector(e2))
+
+Math.rbObj <- function(e1,...)  get(.Generic, mode = "function")(as.vector(e1),...)
+
+Summary.rbObj <- function(e1,...) get(.Generic, mode = "function")(as.vector(e1),...)

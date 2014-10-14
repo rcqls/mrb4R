@@ -1,0 +1,2 @@
+PKG_CFLAGS = -I/usr/lib/ruby/1.8/i686-linux -I/usr/lib/ruby/1.8/i586-linux -I/usr/lib64/ruby/1.8/x86_64-linux -I/usr/lib/ruby/1.8/i386-linux
+PKG_LIBS = -lruby18 -lruby -lcrypt -lm -ldl

@@ -1,0 +1,5 @@
+MRUBY_CFLAGS := $(shell /usr/bin/env mruby-config --cflags)
+MRUBY_LDFLAGS := $(shell /usr/bin/env mruby-config --ldflags)
+MRUBY_LIBS := $(shell /usr/bin/env mruby-config --libs)
+PKG_CFLAGS = $(MRUBY_CFLAGS)
+PKG_LIBS = $(MRUBY_LDFLAGS) $(MRUBY_LIBS) -ldl -lgmp
